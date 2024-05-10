@@ -545,7 +545,6 @@ def upload_and_poll(baseurl):
 
   msg = ''
   
-  
   while True:
     try:
       #
