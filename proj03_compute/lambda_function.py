@@ -87,10 +87,9 @@ def lambda_handler(event, context):
     print("**DOWNLOADING '", bucketkey, "'**")
 
     #
-    # TODO #1 of 8: where do we write local files? Replace
-    # the ??? with the local directory where we have access.
+    # write files to s3 directory
     #
-    local_pdf = "/???/data.pdf"
+    local_pdf = "/tmp/data.pdf"
     
     bucket.download_file(bucketkey, local_pdf)
 
@@ -110,17 +109,20 @@ def lambda_handler(event, context):
     #
     # open connection to the database:
     #
-    #print("**Opening DB connection**")
-    #
-    #dbConn = datatier.get_dbConn(rds_endpoint, rds_portnum, rds_username, rds_pwd, rds_dbname)
-    #
-    # ???
-    #
+    print("**Opening DB connection**")
+    dbConn = datatier.get_dbConn(rds_endpoint, rds_portnum, rds_username, rds_pwd, rds_dbname)
+    
+    # update the database with the status
+    sql = "UPDATE jobs SET status = %s WHERE datafilekey = %s"
+    datatier.perform_action(dbConn, sql, ["processing - starting", bucketkey])
 
     #
     # for each page, extract text, split into words,
     # and see which words are numeric values:
     #
+    # initialize digit counter
+    digit_counts = [0] * 10
+    
     for i in range(0, number_of_pages):
       page = reader.pages[i]
       text = page.extract_text()
@@ -133,10 +135,15 @@ def lambda_handler(event, context):
           # find the first non-zero digit and count it:
           #
           # TODO #3 of 8: add code to do the counting of digits 1..9
-          #
-          # ???
-          #
-          pass
+          # 
+          # for every character
+          for char in word:
+            # if it's a valid non-zero digit
+            if char.isdigit() and int(char) != 0:
+              # add it to the counter
+              digit_counts[int(char)] += 1
+              break
+          
       #
       # now that page has been processed, let's update database to
       # show progress...
@@ -145,17 +152,25 @@ def lambda_handler(event, context):
       # change the value to "processing - page x of y completed".
       # Use the bucketkey --- stored as datafilekey in table ---
       # to identify the row to update. Use the datatier.
+
+      # update the database with the status
+      sql = "UPDATE jobs SET status = %s WHERE datafilekey = %s"
+      status = "processing - page " + str(i) + " of " + str(number_of_pages) + " completed"
+      datatier.perform_action(dbConn, sql, ["processing - starting", bucketkey])
       #
-      # ???
-      #
+      
+    # print the digit count results
+    # print("**RESULTS**")
+    # print(str(number_of_pages) + " pages")
+    # for i, count in enumerate(digit_counts):
+    #   print(i, count)
     
     #
     # analysis complete, write the results to local results file:
     #
-    # TODO #5 of 8: where do we write local files? Replace
-    # the ??? with the local directory where we have access.
+    # write the results to s3 file
     #
-    local_results_file = "/???/results.txt"
+    local_results_file = "/tmp/results.txt"
 
     print("local results file:", local_results_file)
 
@@ -167,7 +182,8 @@ def lambda_handler(event, context):
     #
     # TODO #6 of 8: Write the 10 counts to the file:
     #
-    # ???
+    for i, count in enumerate(digit_counts):
+      outfile.write(str(i) + " " + str(count) + "\n")
     #
     
     outfile.close()
@@ -196,8 +212,14 @@ def lambda_handler(event, context):
     # resultsfilekey to the contents of your variable
     # bucketkey_results_file.
     #
-    # ???
-    #
+    
+    # update the database with the status
+    sql = "UPDATE jobs SET status = %s WHERE datafilekey = %s"
+    datatier.perform_action(dbConn, sql, ["completed", bucketkey])
+    
+    # update the database with the resultsfilekey
+    sql = "UPDATE jobs SET resultsfilekey = %s WHERE datafilekey = %s"
+    datatier.perform_action(dbConn, sql, [bucketkey_results_file, bucketkey])
 
     #
     # done!
@@ -254,10 +276,15 @@ def lambda_handler(event, context):
     # resultsfilekey column to the contents of the variable
     # bucketkey_results_file.
     #
-    #dbConn = datatier.get_dbConn(rds_endpoint, rds_portnum, rds_username, rds_pwd, rds_dbname)
+    dbConn = datatier.get_dbConn(rds_endpoint, rds_portnum, rds_username, rds_pwd, rds_dbname)
     #
-    # ???
-    #
+    # update the database with the status
+    sql = "UPDATE jobs SET status = %s WHERE datafilekey = %s"
+    datatier.perform_action(dbConn, sql, ["error", bucketkey])
+    
+    # update the database with the resultsfilekey
+    sql = "UPDATE jobs SET resultsfilekey = %s WHERE datafilekey = %s"
+    datatier.perform_action(dbConn, sql, [bucketkey_results_file, bucketkey])
 
     #
     # done, return:
